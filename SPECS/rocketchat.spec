@@ -9,26 +9,27 @@
 %global node_ver 0.12
 
 # commit
-%global _commit f74b8254b81549ebd39d7176b204e2fc08464093
+%global _commit 3ed2b6d2766bd4acc1a71bd81afe61052b4079d9
 %global _shortcommit %(c=%{_commit}; echo ${c:0:7})
 
 Name:    rocketchat
-Version: 1.2.0
-Release: 2.git%{_shortcommit}%{?dist}
-Summary: an open-source chat client
+Version: 1.3.1
+Release: 4.git%{_shortcommit}%{?dist}
+Summary: The open source Rocket.Chat Electron desktop client
 
 Group:   Applications/System
 License: MIT
 URL:     https://rocket.chat/
 Source0: https://github.com/RocketChat/Rocket.Chat.Electron/archive/%{_commit}/%{repo}-%{_shortcommit}.tar.gz
 
-BuildArch: noarch
 BuildRequires: npm
 BuildRequires: git-core
 BuildRequires: node-gyp
 BuildRequires: nodejs >= 0.10.0
 BuildRequires: nodejs-packaging
-Requires: electron
+BuildRequires: electron
+#Requires: electron
+Requires: rocketchat-libs
 
 %description
 From group messages and video calls all the way to helpdesk killer features.
@@ -37,6 +38,14 @@ Our goal is to become the number one cross-platform open source chat solution.
 %prep
 %setup -q -n %repo-%{_commit}
 sed -i '/electron-prebuilt/d' package.json
+sed -ri -e '/^[ ]*\.then\((packToDebFile|cleanClutter)\)$/d' \
+        -e 's|node_modules/electron-prebuilt/dist|%{_libdir}/electron|' \
+        tasks/release/linux.js
+sed -ri -e 's|/opt/|%{_libdir}/|' \
+        -e 's|^(Icon=).*|\1%{_datadir}/icons/hicolor/128x128/apps/%{name}.png|' \
+        -e 's|^(Exec=).*|\1%{_bindir}/%{name}|' \
+        resources/linux/app.desktop
+
 git clone https://github.com/creationix/nvm.git .nvm
 source .nvm/nvm.sh
 nvm install %{node_ver}
@@ -46,56 +55,52 @@ npm config set python=`which python2`
 node-gyp -v; node -v; npm -v
 source .nvm/nvm.sh
 nvm use %{node_ver}
+pushd app/
+npm install spellchecker --save
+popd
 npm install --loglevel error
 node_modules/.bin/gulp build --env=production
+node_modules/.bin/gulp release --env=production
 
 %install
-rm -rf build/images/{osx,windows,_templates}
-
 install -d %{buildroot}%{_datadir}/%{name}
-cp -r build/* %{buildroot}%{_datadir}/%{name}
-rm -rf %{buildroot}%{_datadir}/%{name}/node_modules
-
 install -d %{buildroot}%{_datadir}/applications
-sed -e \
-   's|{{productName}}|%{name}|
-    s|{{description}}|%{summary}|
-    s|/opt/{{name}}/{{name}}|%{name}|
-    s|/opt/{{name}}/icon|%{name}|
-    /Path/d' \
-    resources/linux/app.desktop > \
-    %{buildroot}%{_datadir}/applications/%{name}.desktop
-
 install -d %{buildroot}%{_bindir}
-cat > %{buildroot}%{_bindir}/%{name} <<EOF
-#!/bin/bash
-ELECTRON="%{_bindir}/electron"
-ROOT_PATH="%{_datadir}/%{name}"
-"\$ELECTRON" "\$ROOT_PATH" --executed-from="\$(pwd)" --pid=\$\$ "\$@"
-EOF
+install -d %{buildroot}%{_libdir}/%{name}
 
-install -Dm644 build/images/icon.png \
+pushd tmp/%{name}-v%{version}-linux*
+install -Dm664 opt/%{name}/*.so %{buildroot}%{_libdir}/%{name}
+rm -f opt/%{name}/*.so
+install -Dm755 opt/%{name}/%{name} %{buildroot}%{_libdir}/%{name}
+rm -f opt/%{name}/%{name}
+install -Dm644 usr/share/applications/%{name}.desktop \
+    %{buildroot}%{_datadir}/applications/%{name}.desktop
+install -Dm644 opt/%{name}/icon.png \
     %{buildroot}%{_datadir}/icons/hicolor/128x128/apps/%{name}.png
-
-# find all *.js files and generate node.file-list
-pushd build/node_modules
-for ext in js json; do
-  find -iname *.${ext} \
-    ! -name '.*' \
-    ! -name 'bin' \
-    ! -path '*test*' \
-    ! -path '*example*' \
-    ! -path '*benchmark*' \
-    -exec install -Dm644 '{}' '%{buildroot}%{_datadir}/%{name}/node_modules/{}' \;
-done
+rm -f opt/%{name}/icon.png
+cp -r opt/%{name}/* %{buildroot}%{_libdir}/%{name}
 popd
 
-pushd %{buildroot}%{_datadir}
-find -type f -exec chmod 644 '{}' \;
+cat <<-EOF > %{buildroot}%{_bindir}/%{name}
+    #!/bin/bash
+    %{_libdir}/%{name}/%{name}
+EOF
+chmod +x %{buildroot}%{_bindir}/%{name}
+
+%package libs
+Summary: Rocket.Chat.Electron libs
+Provides: libnode.so()(%{__isa_bits}bit), libffmpeg.so()(%{__isa_bits}bit)
+Provides: rocketchat-libs
+%description libs
+Dynamic libraries included by the gulp build
+process for Electron/Rocket.Chat
 
 %post
 /bin/touch --no-create %{_datadir}/icons/hicolor &>/dev/null ||:
 /usr/bin/update-desktop-database &>/dev/null ||:
+
+%post libs
+ldconfig
 
 %postun
 if [ $1 -eq 0 ]; then
@@ -115,7 +120,13 @@ fi
 %{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/*/apps/%{name}.png
 
+%files libs
+%{_libdir}/%{name}
+
 %changelog
+* Sat Jun 4 2016 xenithorb <mike@mgoodwin.net> - 1.3.1-0.git3ed2b6d
+- Release 1.3.1
+- Changed build to do exactly what is done for Ubuntu deb sans building .deb pkg
 * Wed Mar 23 2016 mosquito <sensor.wen@gmail.com> - 1.2.0-2.gitf74b825
 - Release 1.2.0
 * Sat Mar 12 2016 mosquito <sensor.wen@gmail.com> - 1.2.0-1.gitabb7b81
