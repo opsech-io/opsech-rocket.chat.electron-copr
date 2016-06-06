@@ -59,7 +59,6 @@ pushd app/
 npm install spellchecker --save
 popd
 npm install --loglevel error
-node_modules/.bin/gulp build --env=production
 node_modules/.bin/gulp release --env=production
 
 %install
