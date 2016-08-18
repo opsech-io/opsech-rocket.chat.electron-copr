@@ -7,29 +7,32 @@
 %global project Rocket.Chat.Electron
 %global repo %{project}
 %global node_ver 0.12
+%global _optdir /opt
 
 # commit
-%global _commit 3ed2b6d2766bd4acc1a71bd81afe61052b4079d9
+%global _commit df2dfb6ff8b4cbb2e8172954267ba5add8480ab0
 %global _shortcommit %(c=%{_commit}; echo ${c:0:7})
 
 Name:    rocketchat
 Version: 1.3.1
 Release: 4.git%{_shortcommit}%{?dist}
-Summary: The open source Rocket.Chat Electron desktop client
-
-Group:   Applications/System
+Summary: Rocket.Chat Native Cross-Platform Desktop Application via Electron.
+Group:   Applications/Communications
+Vendor:  Rocket.Chat Community
 License: MIT
 URL:     https://rocket.chat/
-Source0: https://github.com/RocketChat/Rocket.Chat.Electron/archive/%{_commit}/%{repo}-%{_shortcommit}.tar.gz
-
+Source0: https://github.com/xenithorb/Rocket.Chat.Electron/archive/%{_commit}/%{repo}-%{_shortcommit}.tar.gz
+AutoReq: 0
+# npm after F24 is included in nodejs
+%if 0%{?fedora} < 24
 BuildRequires: npm
+%endif
 BuildRequires: git-core
 BuildRequires: node-gyp
 BuildRequires: nodejs >= 0.10.0
 BuildRequires: nodejs-packaging
-BuildRequires: electron
-#Requires: electron
-Requires: rocketchat-libs
+#Provides: libnode.so()(%{__isa_bits}bit), libffmpeg.so()(%{__isa_bits}bit)
+#BuildRequires: electron <= 0.37.8
 
 %description
 From group messages and video calls all the way to helpdesk killer features.
@@ -37,14 +40,13 @@ Our goal is to become the number one cross-platform open source chat solution.
 
 %prep
 %setup -q -n %repo-%{_commit}
-sed -i '/electron-prebuilt/d' package.json
-sed -ri -e '/^[ ]*\.then\((packToDebFile|cleanClutter)\)$/d' \
-        -e 's|node_modules/electron-prebuilt/dist|%{_libdir}/electron|' \
-        tasks/release/linux.js
-sed -ri -e 's|/opt/|%{_libdir}/|' \
-        -e 's|^(Icon=).*|\1%{_datadir}/icons/hicolor/128x128/apps/%{name}.png|' \
-        -e 's|^(Exec=).*|\1%{_bindir}/%{name}|' \
-        resources/linux/app.desktop
+#sed -i '/electron-prebuilt/d' package.json
+sed -ri 's|("electron-prebuilt.*?").*?(".*)|\10.37.8\2|' package.json
+sed -ri '/^[ ]*\.then\((packToDebFile|cleanClutter)\)$/d' tasks/release/linux.js
+#sed -ri 's|node_modules/electron-prebuilt/dist|%{_libdir}/electron|' tasks/release/linux.js
+sed -ri -e 's|^(Icon=).*|\1%{_datadir}/icons/hicolor/128x128/apps/%{name}.png|' \
+		-e 's|^(Exec=).*|\1%{_bindir}/%{name}|' \
+		resources/linux/app.desktop
 
 git clone https://github.com/creationix/nvm.git .nvm
 source .nvm/nvm.sh
@@ -62,44 +64,27 @@ npm install --loglevel error
 node_modules/.bin/gulp release --env=production
 
 %install
-install -d %{buildroot}%{_datadir}/%{name}
 install -d %{buildroot}%{_datadir}/applications
 install -d %{buildroot}%{_bindir}
-install -d %{buildroot}%{_libdir}/%{name}
+install -d %{buildroot}%{_optdir}/%{name}
 
 pushd tmp/%{name}-v%{version}-linux*
-install -Dm664 opt/%{name}/*.so %{buildroot}%{_libdir}/%{name}
-rm -f opt/%{name}/*.so
-install -Dm755 opt/%{name}/%{name} %{buildroot}%{_libdir}/%{name}
-rm -f opt/%{name}/%{name}
 install -Dm644 usr/share/applications/%{name}.desktop \
     %{buildroot}%{_datadir}/applications/%{name}.desktop
 install -Dm644 opt/%{name}/icon.png \
     %{buildroot}%{_datadir}/icons/hicolor/128x128/apps/%{name}.png
 rm -f opt/%{name}/icon.png
-cp -r opt/%{name}/* %{buildroot}%{_libdir}/%{name}
+cp -r opt/%{name}/* %{buildroot}%{_optdir}/%{name}/
 popd
-
 cat <<-EOF > %{buildroot}%{_bindir}/%{name}
     #!/bin/bash
-    %{_libdir}/%{name}/%{name}
+    %{_optdir}/%{name}/%{name}
 EOF
 chmod +x %{buildroot}%{_bindir}/%{name}
-
-%package libs
-Summary: Rocket.Chat.Electron libs
-Provides: libnode.so()(%{__isa_bits}bit), libffmpeg.so()(%{__isa_bits}bit)
-Provides: rocketchat-libs
-%description libs
-Dynamic libraries included by the gulp build
-process for Electron/Rocket.Chat
 
 %post
 /bin/touch --no-create %{_datadir}/icons/hicolor &>/dev/null ||:
 /usr/bin/update-desktop-database &>/dev/null ||:
-
-%post libs
-ldconfig
 
 %postun
 if [ $1 -eq 0 ]; then
@@ -113,14 +98,11 @@ fi
 
 %files
 %defattr(-,root,root,-)
-%doc README.md
+#%doc README.md
 %attr(755,-,-) %{_bindir}/%{name}
-%{_datadir}/%{name}/
 %{_datadir}/applications/%{name}.desktop
 %{_datadir}/icons/hicolor/*/apps/%{name}.png
-
-%files libs
-%{_libdir}/%{name}
+%{_optdir}/%{name}
 
 %changelog
 * Sat Jun 4 2016 xenithorb <mike@mgoodwin.net> - 1.3.1-0.git3ed2b6d
