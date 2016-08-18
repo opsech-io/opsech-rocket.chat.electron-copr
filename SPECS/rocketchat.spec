@@ -10,12 +10,12 @@
 %global _optdir /opt
 
 # commit
-%global _commit df2dfb6ff8b4cbb2e8172954267ba5add8480ab0
+%global _commit 7ce74dd84b199a5af9918e1aa4588def2c42eb89
 %global _shortcommit %(c=%{_commit}; echo ${c:0:7})
 
 Name:    rocketchat
-Version: 1.3.1
-Release: 4.git%{_shortcommit}%{?dist}
+Version: dev
+Release: 0.git%{_shortcommit}%{?dist}
 Summary: Rocket.Chat Native Cross-Platform Desktop Application via Electron.
 Group:   Applications/Communications
 Vendor:  Rocket.Chat Community
@@ -31,6 +31,9 @@ BuildRequires: git-core
 BuildRequires: node-gyp
 BuildRequires: nodejs >= 0.10.0
 BuildRequires: nodejs-packaging
+BuildRequires: fakeroot
+BuildRequires: nodejs
+Obsoletes: rocketchat <= 1.3.1
 #Provides: libnode.so()(%{__isa_bits}bit), libffmpeg.so()(%{__isa_bits}bit)
 #BuildRequires: electron <= 0.37.8
 
@@ -42,33 +45,27 @@ Our goal is to become the number one cross-platform open source chat solution.
 %setup -q -n %repo-%{_commit}
 #sed -i '/electron-prebuilt/d' package.json
 sed -ri 's|("electron-prebuilt.*?").*?(".*)|\10.37.8\2|' package.json
-sed -ri '/^[ ]*\.then\((packToDebFile|cleanClutter)\)$/d' tasks/release/linux.js
+sed -ri '/^[ ]*\.then\((packTo(Deb|Rpm)File|cleanClutter)\)$/d' tasks/release/linux.js
 #sed -ri 's|node_modules/electron-prebuilt/dist|%{_libdir}/electron|' tasks/release/linux.js
 sed -ri -e 's|^(Icon=).*|\1%{_datadir}/icons/hicolor/128x128/apps/%{name}.png|' \
 		-e 's|^(Exec=).*|\1%{_bindir}/%{name}|' \
 		resources/linux/app.desktop
 
-git clone https://github.com/creationix/nvm.git .nvm
-source .nvm/nvm.sh
-nvm install %{node_ver}
 npm config set python=`which python2`
 
 %build
 node-gyp -v; node -v; npm -v
-source .nvm/nvm.sh
-nvm use %{node_ver}
-pushd app/
-npm install spellchecker --save
-popd
 npm install --loglevel error
-node_modules/.bin/gulp release --env=production
+./node_modules/.bin/gulp release --env=production
 
 %install
 install -d %{buildroot}%{_datadir}/applications
 install -d %{buildroot}%{_bindir}
 install -d %{buildroot}%{_optdir}/%{name}
 
-pushd tmp/%{name}-v%{version}-linux*
+#pushd tmp/%{name}-v%{version}-linux*
+# 1.3.1 unitl they change the manifest
+pushd tmp/%{name}-v*-linux*
 install -Dm644 usr/share/applications/%{name}.desktop \
     %{buildroot}%{_datadir}/applications/%{name}.desktop
 install -Dm644 opt/%{name}/icon.png \
