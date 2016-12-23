@@ -3,39 +3,38 @@
 %global _hardened_build 1
 %global __requires_exclude (npm)
 %global __provides_exclude (npm)
-
 %global project Rocket.Chat.Electron
 %global repo %{project}
-%global node_ver 0.12
+%global node_ver 4.6.2
 %global _optdir /opt
 
 # commit
-%global _commit 7ce74dd84b199a5af9918e1aa4588def2c42eb89
+%global _commit 21425565c2f962fd2cb3800c970d4d953b12b076
 %global _shortcommit %(c=%{_commit}; echo ${c:0:7})
 
 Name:    rocketchat
-Version: dev
+Version: 1.3.3
 Release: 0.git%{_shortcommit}%{?dist}
 Summary: Rocket.Chat Native Cross-Platform Desktop Application via Electron.
 Group:   Applications/Communications
 Vendor:  Rocket.Chat Community
 License: MIT
 URL:     https://rocket.chat/
-Source0: https://github.com/xenithorb/Rocket.Chat.Electron/archive/%{_commit}/%{repo}-%{_shortcommit}.tar.gz
+Source0: https://github.com/RocketChat/Rocket.Chat.Electron/archive/%{_commit}/%{repo}-%{_shortcommit}.tar.gz
 AutoReq: 0
-# npm after F24 is included in nodejs
-%if 0%{?fedora} < 24
+
+Obsoletes: rocketchat == dev
+Obsoletes: rocketchat <= 1.3.2
+
 BuildRequires: npm
-%endif
 BuildRequires: git-core
 BuildRequires: node-gyp
-BuildRequires: nodejs >= 0.10.0
+BuildRequires: nodejs >= %{node_ver}
 BuildRequires: nodejs-packaging
 BuildRequires: fakeroot
 BuildRequires: nodejs
-Obsoletes: rocketchat <= 1.3.1
-#Provides: libnode.so()(%{__isa_bits}bit), libffmpeg.so()(%{__isa_bits}bit)
-#BuildRequires: electron <= 0.37.8
+BuildRequires: libX11-devel libXScrnSaver-devel libXext-devel
+#BuildRequires: electron >= 1.4.3
 
 %description
 From group messages and video calls all the way to helpdesk killer features.
@@ -43,20 +42,24 @@ Our goal is to become the number one cross-platform open source chat solution.
 
 %prep
 %setup -q -n %repo-%{_commit}
-#sed -i '/electron-prebuilt/d' package.json
-sed -ri 's|("electron-prebuilt.*?").*?(".*)|\10.37.8\2|' package.json
 sed -ri '/^[ ]*\.then\((packTo(Deb|Rpm)File|cleanClutter)\)$/d' tasks/release/linux.js
-#sed -ri 's|node_modules/electron-prebuilt/dist|%{_libdir}/electron|' tasks/release/linux.js
 sed -ri -e 's|^(Icon=).*|\1%{_datadir}/icons/hicolor/128x128/apps/%{name}.png|' \
-		-e 's|^(Exec=).*|\1%{_bindir}/%{name}|' \
-		resources/linux/app.desktop
+    -e 's|^(Exec=).*|\1%{_bindir}/%{name}|' \
+    resources/linux/app.desktop
 
 npm config set python=`which python2`
 
 %build
 node-gyp -v; node -v; npm -v
-npm install --loglevel error
-./node_modules/.bin/gulp release --env=production
+find . -mindepth 1 -maxdepth 2 -type d -name 'node_modules' -exec rm -rvf '{}' \+
+npm install n
+%ifarch i686
+N_PREFIX=$PWD ./node_modules/n/bin/n -a x86 %{node_ver}
+%else
+N_PREFIX=$PWD ./node_modules/n/bin/n %{node_ver}
+%endif
+./n/versions/node/%{node_ver}/bin/npm install
+./n/versions/node/%{node_ver}/bin/npm run release
 
 %install
 install -d %{buildroot}%{_datadir}/applications
@@ -102,6 +105,11 @@ fi
 %{_optdir}/%{name}
 
 %changelog
+* Fri Dec 23 2016 xenithorb <mike@mgoodwin.net> - 1.3.3-100.git2142556
+- Development channel ver 1.3.3
+- Upgrade node version to 4.6.2
+- Electron version to 1.4.3
+- Spellcheck support!
 * Sat Jun 4 2016 xenithorb <mike@mgoodwin.net> - 1.3.1-0.git3ed2b6d
 - Release 1.3.1
 - Changed build to do exactly what is done for Ubuntu deb sans building .deb pkg
